@@ -9,7 +9,7 @@
 Get a daily email of zero-hour auto purge (ZAP) and manual remediation actions for one mailbox from Microsoft Defender advanced hunting, plus an alert for each new action. This folder covers three options, each with a step-by-step text guide.
 
 > [!IMPORTANT]
-> This is a community sample, provided as-is. It isn't a supported Microsoft product. Test it in a lab tenant first. Tenant-specific screenshots and run details are omitted from this public version.
+> This is a community sample, provided as-is. It isn't a supported Microsoft product. Test it in a lab tenant first. Screenshots in this public version have tenant-specific details (mailbox addresses, tenant IDs, sender names) redacted.
 
 Defender shows ZAP and manual remediation actions in Explorer one event at a time. It doesn't send a daily summary for one mailbox, and it doesn't alert on each action by default. This folder covers both.
 
@@ -25,7 +25,7 @@ Pick an option, then follow its steps. The diagrams and sample output are illust
 </tr>
 </table>
 
-Also: [Choose an option](#choose-an-option) · [Test before production](#test-before-production) · [Limits](#limits) · [Files](#files)
+Also: [Choose an option](#choose-an-option) · [Request Release button](#request-release-button) · [Test before production](#test-before-production) · [Limits](#limits) · [Files](#files)
 
 ## Choose an option
 
@@ -312,6 +312,102 @@ Nothing skips the send step, so a run with no matching rows still sends an email
 - **No catch-up.** A failed run isn't retried for the day it missed. Watch the run history.
 - **Late events can be missed.** The digest filters on event time within the last 24 hours. An event that appears after a run starts isn't picked up by that run or the next one.
 
+## Request Release button
+
+ZAP and manual remediation move a message out of the inbox. Sometimes that message is wanted back. This section adds a **Request Release** link to each row of the daily digest, so whoever reads the digest can ask for a message back with one click instead of hunting down the message ID and typing an email by hand.
+
+Clicking the link opens a new email addressed to your email team, with the subject and a pre-filled body (recipient, sender, and the message's `NetworkMessageId`) already in place. The reader adds a reason and sends it. No new infrastructure, no new permissions, and no change to who can actually release a message — that's still whoever holds the **Quarantine Administrator** role or equivalent rights in your tenant.
+
+Applies to both the [Power Automate digest](#power-automate-digest) and the [Logic App digest](#logic-app-digest). Replace `emailteam@example.com` in the steps below with your own email team's shared mailbox or distribution list.
+
+<p align="center"><img src="docs/images/v2-07-working-button.png" alt="Request Release link in the digest email" width="800"></p>
+
+### Why this needs an extra step
+
+**Create HTML table** HTML-encodes the text in every custom column, including angle brackets and quotes. A column value of `<a href="mailto:...">Request Release</a>` comes out the other end as literal, unclickable text — the reader sees the tag, not a link. The fix is one more action that reverses the encoding before the email is sent.
+
+**Power Automate**
+
+### Step 1. Switch Create HTML table to custom columns
+
+Open **Create HTML table**. Under **Advanced parameters**, select **Show all**, then set **Columns** to **Custom**.
+
+<p align="center"><img src="docs/images/v2-01-flow-before.png" alt="Create HTML table before the change, in Automatic mode" width="800"></p>
+
+> [!NOTE]
+> Switching to **Custom** clears the automatic columns. You re-add them yourself in the next step, so the digest keeps the same look.
+
+### Step 2. Re-add the columns, plus one more
+
+Add six custom columns. The first five match the table's existing fields. The sixth is new:
+
+| Header | Value |
+|---|---|
+| `Timestamp` | `@{item()?['Timestamp']}` |
+| `ActionType` | `@{item()?['ActionType']}` |
+| `ActionResult` | `@{item()?['ActionResult']}` |
+| `Sender` | `@{item()?['SenderFromAddress']}` |
+| `Subject` | `@{item()?['Subject']}` |
+| `Action` | see below |
+
+The `Action` column's value (one line, shown wrapped here):
+
+```
+@{concat('<a href="mailto:emailteam@example.com?subject=', encodeUriComponent(concat('Release Request: ', string(item()?['Subject']))), '&body=', encodeUriComponent('Please release this message.'), '%0D%0A%0D%0ANetworkMessageId%3A%20', encodeUriComponent(string(item()?['NetworkMessageId'])), '%0D%0ARecipient%3A%20', encodeUriComponent(string(item()?['RecipientEmailAddress'])), '%0D%0ASender%3A%20', encodeUriComponent(string(item()?['SenderFromAddress'])), '">Request Release</a>')}
+```
+
+<p align="center"><img src="docs/images/v2-02-custom-columns.png" alt="Six custom columns, including the Action column expression" width="800"></p>
+
+Select **Save**.
+
+<p align="center"><img src="docs/images/v2-03-saved.png" alt="Flow saved and ready to test" width="800"></p>
+
+### Step 3. Add a Compose action to undo the HTML encoding
+
+Add a **Compose** action between **Create HTML table** and **Send an email (V2)**. Name doesn't matter — this guide calls it `Compose 1`.
+
+<p align="center"><img src="docs/images/v2-04-compose-added.png" alt="New Compose action inserted before Send an email" width="800"></p>
+
+Set its **Inputs** to:
+
+```
+@{replace(replace(replace(replace(body('Create_HTML_table'), '&amp;', '&'), '&lt;', '<'), '&gt;', '>'), '&quot;', '"')}
+```
+
+<p align="center"><img src="docs/images/v2-05-compose-expression.png" alt="Compose action code view showing the unescape expression" width="800"></p>
+
+### Step 4. Point Send an email (V2) at the new Compose output
+
+Open **Send an email (V2)**. Delete the existing dynamic content in **Body**, then use the dynamic content picker (type `/` in the body, or use the lightning-bolt icon) to insert **Compose 1**'s **Outputs**.
+
+<p align="center"><img src="docs/images/v2-06-sendemail-body.png" alt="Send an email Body referencing the Compose action output" width="800"></p>
+
+> [!WARNING]
+> Don't type `@{body('Compose_1')}` into the Body field by hand. A **Compose** action's result is read with `outputs('Compose_1')`, not `body('Compose_1')` — `body()` is for actions that return a structured response (like **HTTP** or **Create HTML table**). Typing the wrong one looks correct in the designer and still saves, but the email arrives with an empty body. Always insert this one through the dynamic content picker so the designer uses the right function for you.
+
+### Step 5. Save and test
+
+Select **Save**, then **Test** it the same way as [step 17](#step-17-turn-on-run-and-check-the-history). If there's a matching ZAP or manual remediation action in the last 24 hours, the digest arrives with a working **Request Release** link in the last column.
+
+**Logic App**
+
+The template at [logic-app/zap-daily-report-la.json](logic-app/zap-daily-report-la.json) already includes this button — it adds the same `Action` column, the same unescaping `Unescape_the_table` Compose action, and points **Send_email** at its output. If you deployed the template before this update, redeploy it (same command as [step 1](#step-1-deploy-the-template)) to pick up the change. There's nothing else to configure.
+
+### Request Release troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| The link shows as literal text, like `<a href="mailto:...">Request Release</a>` | Create HTML table's HTML encoding wasn't reversed | Add the Compose step (Power Automate: step 3) and confirm Send an email's Body points at its output. |
+| The email body is empty | Body references `body('Compose_1')` instead of `outputs('Compose_1')` | Delete the Body content and re-insert it with the dynamic content picker. |
+| Clicking the link does nothing, or opens the wrong app | The reader's device has no default mail handler, or a different one than expected | Expected outside Outlook desktop/web. The link itself (a plain `mailto:`) is still correct. |
+| Clicking produces a mangled subject or body | A `Subject` or sender value contains characters that break URL encoding | Confirm every dynamic value in the `Action` column goes through `encodeUriComponent()`, not raw concatenation. |
+
+### Request Release limits
+
+- **It's a request, not a release.** The link only opens a pre-filled email. Nobody's inbox permissions change, and no message moves until a person with release rights acts on it.
+- **One fixed recipient.** The address is hard-coded in the expression. To route requests differently per mailbox or severity, you'd need a lookup step instead of a literal string.
+- **Depends on the reader's mail client.** `mailto:` links work in Outlook desktop, web, and mobile, and in most other mail clients. A device with no mail app configured can't act on the link.
+
 ## Custom detection
 
 This section creates the near real-time custom detection that raises a Medium alert for each ZAP or manual remediation action on one mailbox. The detection itself sends no email. Defender emails the incident through an incident notification rule, which step 11 checks.
@@ -456,9 +552,9 @@ The two graphics below are mock-ups with synthetic data and fictional addresses.
 
 | File | What it is |
 |---|---|
-| `README.md` | This page: the three step-by-step guides, the comparison, and the test results |
-| `docs/images/` | Two synthetic sample graphics |
-| `logic-app/zap-daily-report-la.json` | ARM template for the Logic App. It has no secrets. |
+| `README.md` | This page: the three step-by-step guides, the Request Release button, the comparison, and the test results |
+| `docs/images/` | Two synthetic sample graphics, plus seven redacted screenshots of the Request Release button walkthrough |
+| `logic-app/zap-daily-report-la.json` | ARM template for the Logic App, including the Request Release button. It has no secrets. |
 | `queries/zap-daily-report.kql` | The daily digest query, used by both digests |
 | `queries/custom-detection.kql` | The custom detection query. It has no comments, because NRT rules don't allow them. |
 | `LICENSE` | MIT license |
@@ -484,3 +580,9 @@ Validate the permissions, query results, schedule, email connection, and notific
 
 **Dr. Muataz Awad**
 Principal Cloud Solution Architect — Security
+
+---
+
+## Disclaimer
+
+This is a personal project I maintain in an individual capacity. It is **not an official Microsoft product** and is not endorsed, reviewed, or supported by Microsoft. All opinions, code, and content here are my own and do not represent the views of my employer. Provided **"as-is"**, with no warranty — use at your own risk.

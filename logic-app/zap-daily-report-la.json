@@ -117,13 +117,28 @@
               },
               "inputs": {
                 "from": "@body('Run_hunting_query')?['results']",
-                "format": "HTML"
+                "format": "HTML",
+                "columns": [
+                  { "header": "Timestamp", "value": "@item()?['Timestamp']" },
+                  { "header": "ActionType", "value": "@item()?['ActionType']" },
+                  { "header": "ActionResult", "value": "@item()?['ActionResult']" },
+                  { "header": "Sender", "value": "@item()?['SenderFromAddress']" },
+                  { "header": "Subject", "value": "@item()?['Subject']" },
+                  { "header": "Action", "value": "@{concat('<a href=\"mailto:emailteam@example.com?subject=', encodeUriComponent(concat('Release Request: ', string(item()?['Subject']))), '&body=', encodeUriComponent('Please release this message.'), '%0D%0A%0D%0ANetworkMessageId%3A%20', encodeUriComponent(string(item()?['NetworkMessageId'])), '%0D%0ARecipient%3A%20', encodeUriComponent(string(item()?['RecipientEmailAddress'])), '%0D%0ASender%3A%20', encodeUriComponent(string(item()?['SenderFromAddress'])), '\">Request Release</a>')}" }
+                ]
               }
+            },
+            "Unescape_the_table": {
+              "type": "Compose",
+              "runAfter": {
+                "Create_HTML_table": [ "Succeeded" ]
+              },
+              "inputs": "@{replace(replace(replace(replace(body('Create_HTML_table'), '&amp;', '&'), '&lt;', '<'), '&gt;', '>'), '&quot;', '\"')}"
             },
             "Send_email": {
               "type": "ApiConnection",
               "runAfter": {
-                "Create_HTML_table": [ "Succeeded" ]
+                "Unescape_the_table": [ "Succeeded" ]
               },
               "inputs": {
                 "host": {
@@ -136,7 +151,7 @@
                 "body": {
                   "To": "@parameters('ReportRecipient')",
                   "Subject": "Daily ZAP and manual remediation report for @{parameters('TargetMailbox')}",
-                  "Body": "<p>@{body('Create_HTML_table')}</p>",
+                  "Body": "<p>@{outputs('Unescape_the_table')}</p>",
                   "Importance": "Normal"
                 }
               }
