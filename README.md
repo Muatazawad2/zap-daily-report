@@ -332,7 +332,7 @@ Applies to both the [Power Automate digest](#power-automate-digest) and the [Log
 
 Open **Create HTML table**. Under **Advanced parameters**, select **Show all**, then set **Columns** to **Custom**.
 
-<p align="center"><img src="docs/images/v2-01-flow-before.png" alt="Create HTML table before the change, in Automatic mode" width="800"></p>
+<p align="center"><img src="docs/images/v2-01-flow-before.png" alt="Create HTML table's Parameters panel with Columns set to Automatic, before the change" width="800"></p>
 
 > [!NOTE]
 > Switching to **Custom** clears the automatic columns. You re-add them yourself in the next step, so the digest keeps the same look.
@@ -388,6 +388,8 @@ Open **Send an email (V2)**. Delete the existing dynamic content in **Body**, th
 ### Step 5. Save and test
 
 Select **Save**, then **Test** it the same way as [step 17](#step-17-turn-on-run-and-check-the-history). If there's a matching ZAP or manual remediation action in the last 24 hours, the digest arrives with a working **Request Release** link in the last column.
+
+<p align="center"><img src="docs/images/v2-08-save-and-test.png" alt="Successful test run, with Create HTML table, Compose 1, and Send an email all green" width="800"></p>
 
 **Logic App**
 
@@ -553,7 +555,7 @@ The two graphics below are mock-ups with synthetic data and fictional addresses.
 | File | What it is |
 |---|---|
 | `README.md` | This page: the three step-by-step guides, the Request Release button, the comparison, and the test results |
-| `docs/images/` | Two synthetic sample graphics, plus seven redacted screenshots of the Request Release button walkthrough |
+| `docs/images/` | Two synthetic sample graphics, plus eight redacted screenshots of the Request Release button walkthrough |
 | `logic-app/zap-daily-report-la.json` | ARM template for the Logic App, including the Request Release button. It has no secrets. |
 | `queries/zap-daily-report.kql` | The daily digest query, used by both digests |
 | `queries/custom-detection.kql` | The custom detection query. It has no comments, because NRT rules don't allow them. |
